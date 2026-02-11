@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SIMTRADE — Paper Trading Simulator</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>">
+    <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <!-- Top Bar -->
+    <header id="topbar">
+        <div class="topbar-left">
+            <h1><span class="logo-sim">SIM</span><span class="logo-trade">TRADE</span></h1>
+            <div class="wallet-summary">
+                <span class="label">Cash:</span>
+                <span id="topbar-cash">$100,000.00</span>
+                <span class="divider">|</span>
+                <span class="label">Portfolio:</span>
+                <span id="topbar-portfolio">$100,000.00</span>
+                <span class="divider">|</span>
+                <span class="label">P&L:</span>
+                <span id="topbar-pnl" class="neutral">$0.00</span>
+            </div>
+        </div>
+        <div class="topbar-right">
+            <button id="btn-reset-wallet" class="btn btn-danger-sm" title="Reset wallet to $100k">Reset Wallet</button>
+        </div>
+    </header>
+
+    <div id="app">
+        <!-- Left Panel: Controls -->
+        <aside id="controls-panel">
+            <!-- New Trade Button -->
+            <div class="panel-section new-trade-section">
+                <button id="btn-new-trade" class="btn btn-primary" style="width:100%; font-size:14px; padding:10px;">
+                    + New Trade
+                </button>
+            </div>
+
+            <!-- Stock Selector -->
+            <div class="panel-section">
+                <h3>Stock</h3>
+                <select id="stock-selector"></select>
+                <div id="stock-price" class="big-price">--</div>
+            </div>
+
+            <!-- Timeframe -->
+            <div class="panel-section">
+                <h3>Timeframe</h3>
+                <div class="timeframe-buttons">
+                    <button class="tf-btn" data-tf="1s">1S</button>
+                    <button class="tf-btn" data-tf="1m">1M</button>
+                    <button class="tf-btn active" data-tf="1h">1H</button>
+                    <button class="tf-btn" data-tf="1d">1D</button>
+                    <button class="tf-btn" data-tf="1mo">1Mo</button>
+                    <button class="tf-btn" data-tf="1y">1Y</button>
+                </div>
+            </div>
+
+            <!-- Indicators -->
+            <div class="panel-section">
+                <h3>Indicators</h3>
+                <div class="indicator-toggles">
+                    <label><input type="checkbox" id="ind-sma20"> SMA 20</label>
+                    <label><input type="checkbox" id="ind-sma50"> SMA 50</label>
+                    <label><input type="checkbox" id="ind-ema12"> EMA 12</label>
+                    <label><input type="checkbox" id="ind-ema26"> EMA 26</label>
+                    <label><input type="checkbox" id="ind-bollinger"> Bollinger</label>
+                    <label><input type="checkbox" id="ind-rsi"> RSI</label>
+                    <label><input type="checkbox" id="ind-macd"> MACD</label>
+                </div>
+            </div>
+
+            <!-- Simulation -->
+            <div class="panel-section">
+                <h3>Simulation</h3>
+                <div class="sim-controls">
+                    <button id="btn-sim-start" class="btn btn-primary">Start Simulation</button>
+                    <button id="btn-sim-pause" class="btn btn-secondary" disabled>Pause</button>
+                    <button id="btn-sim-stop" class="btn btn-danger" disabled>Stop</button>
+                </div>
+                <div class="speed-control">
+                    <label>Speed:</label>
+                    <select id="sim-speed">
+                        <option value="2000">0.5x</option>
+                        <option value="1000" selected>1x</option>
+                        <option value="500">2x</option>
+                        <option value="250">4x</option>
+                        <option value="100">10x</option>
+                    </select>
+                    <span id="sim-status" class="sim-badge">Stopped</span>
+                </div>
+                <div id="sim-progress-wrap" style="display:none;">
+                    <div class="progress-bar"><div id="sim-progress" class="progress-fill"></div></div>
+                    <span id="sim-candle-count">0 / 0</span>
+                </div>
+            </div>
+
+            <!-- Trading -->
+            <div class="panel-section">
+                <h3>Quick Trade</h3>
+                <div class="trade-form">
+                    <div class="trade-row">
+                        <label>Qty:</label>
+                        <input type="number" id="trade-qty" value="1" min="1">
+                    </div>
+                    <div class="trade-row">
+                        <label>Price:</label>
+                        <input type="number" id="trade-price" step="0.01" readonly>
+                    </div>
+                    <div class="trade-row">
+                        <label>Total:</label>
+                        <span id="trade-total">$0.00</span>
+                    </div>
+                    <div class="trade-buttons">
+                        <button id="btn-buy" class="btn btn-buy">BUY</button>
+                        <button id="btn-sell" class="btn btn-sell">SELL</button>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Center: Chart Area -->
+        <main id="chart-area">
+            <!-- Toolbar: Layout selector + Paint -->
+            <div id="chart-toolbar">
+                <div class="layout-selector">
+                    <button class="layout-btn active" data-layout="1" title="Single chart">
+                        <svg width="16" height="16" viewBox="0 0 16 16"><rect x="1" y="1" width="14" height="14" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+                    </button>
+                    <button class="layout-btn" data-layout="2h" title="2 charts side by side">
+                        <svg width="16" height="16" viewBox="0 0 16 16"><rect x="1" y="1" width="6" height="14" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="9" y="1" width="6" height="14" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+                    </button>
+                    <button class="layout-btn" data-layout="4" title="4 charts grid">
+                        <svg width="16" height="16" viewBox="0 0 16 16"><rect x="1" y="1" width="6" height="6" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="9" y="1" width="6" height="6" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="1" y="9" width="6" height="6" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="9" y="9" width="6" height="6" rx="1" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+                    </button>
+                </div>
+                <div class="toolbar-divider"></div>
+                <!-- Paint controls -->
+                <button id="btn-paint-toggle" class="paint-toggle" title="Toggle paintbrush (P)">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
+                    <span>Paint</span>
+                </button>
+                <div class="paint-colors">
+                    <button class="paint-color active" data-color="#f85149" style="background:#f85149" title="Red"></button>
+                    <button class="paint-color" data-color="#3fb950" style="background:#3fb950" title="Green"></button>
+                    <button class="paint-color" data-color="#58a6ff" style="background:#58a6ff" title="Blue"></button>
+                    <button class="paint-color" data-color="#d29922" style="background:#d29922" title="Yellow"></button>
+                    <button class="paint-color" data-color="#bc8cff" style="background:#bc8cff" title="Purple"></button>
+                    <button class="paint-color" data-color="#f0883e" style="background:#f0883e" title="Orange"></button>
+                    <button class="paint-color" data-color="#ffffff" style="background:#ffffff" title="White"></button>
+                    <button class="paint-color" data-color="#ff69b4" style="background:#ff69b4" title="Pink"></button>
+                </div>
+                <select id="paint-size" title="Brush size">
+                    <option value="2">Thin</option>
+                    <option value="4" selected>Medium</option>
+                    <option value="8">Thick</option>
+                </select>
+                <button id="btn-paint-undo" class="paint-action" title="Undo (Ctrl+Z)">Undo</button>
+                <button id="btn-paint-clear" class="paint-action" title="Clear all">Clear</button>
+            </div>
+
+            <!-- Chart Grid (windows created dynamically by JS) -->
+            <div id="chart-grid"></div>
+        </main>
+
+        <!-- Right Panel: Portfolio -->
+        <aside id="portfolio-panel">
+            <div class="panel-section">
+                <h3>Positions</h3>
+                <div id="positions-list" class="positions-list">
+                    <p class="empty-msg">No open positions</p>
+                </div>
+            </div>
+            <div class="panel-section">
+                <h3>Trade History</h3>
+                <div id="trade-history" class="trade-history">
+                    <p class="empty-msg">No trades yet</p>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <!-- Toast notification -->
+    <div id="toast" class="toast hidden"></div>
+
+    <!-- New Trade Modal -->
+    <div id="trade-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>New Trade</h3>
+                <button id="btn-close-modal" class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="trade-row">
+                    <label>Symbol:</label>
+                    <select id="modal-symbol-selector"></select>
+                </div>
+                <div class="modal-price-display">
+                    <span id="modal-symbol-name">--</span>
+                    <div id="modal-current-price" class="big-price">--</div>
+                </div>
+                <div class="trade-row">
+                    <label>Action:</label>
+                    <div class="modal-action-tabs">
+                        <button class="modal-tab active" data-action="buy">BUY</button>
+                        <button class="modal-tab" data-action="sell">SELL</button>
+                    </div>
+                </div>
+                <div class="trade-row">
+                    <label>Qty:</label>
+                    <input type="number" id="modal-trade-qty" value="1" min="1">
+                </div>
+                <div class="trade-row">
+                    <label>Total:</label>
+                    <span id="modal-trade-total">$0.00</span>
+                </div>
+                <button id="btn-modal-execute" class="btn btn-buy" style="width:100%; margin-top:12px; padding:12px; font-size:14px;">
+                    Execute Trade
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
