@@ -573,6 +573,8 @@ select:focus, input[type="number"]:focus { border-color: var(--blue); }
 
 .trade-tag.buy { background: var(--green-bg); color: var(--green); }
 .trade-tag.sell { background: var(--red-bg); color: var(--red); }
+.trade-tag.short { background: var(--red-bg); color: var(--red); }
+.trade-tag.cover { background: var(--blue-bg); color: var(--blue); }
 .trade-record .trade-info { flex: 1; color: var(--text-dim); }
 .trade-record .trade-amount { font-weight: 600; }
 .empty-msg { font-size: 12px; color: var(--text-muted); text-align: center; padding: 20px 0; }
@@ -662,6 +664,103 @@ select:focus, input[type="number"]:focus { border-color: var(--blue); }
 .modal-tab:hover { color: var(--text); }
 .modal-tab.active[data-action="buy"] { background: var(--green-bg); color: var(--green); border-color: var(--green); }
 .modal-tab.active[data-action="sell"] { background: var(--red-bg); color: var(--red); border-color: var(--red); }
+
+/* === Long/Short Direction Choice === */
+.direction-choice {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.direction-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    padding: 18px 16px;
+    border: 2px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg-section);
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: inherit;
+}
+
+.direction-btn:hover { transform: scale(1.02); }
+
+.direction-long {
+    border-color: rgba(63,185,80,0.3);
+    background: rgba(63,185,80,0.08);
+}
+
+.direction-long:hover {
+    border-color: var(--green);
+    background: rgba(63,185,80,0.15);
+    box-shadow: 0 0 20px rgba(63,185,80,0.15);
+}
+
+.direction-short {
+    border-color: rgba(248,81,73,0.3);
+    background: rgba(248,81,73,0.08);
+}
+
+.direction-short:hover {
+    border-color: var(--red);
+    background: rgba(248,81,73,0.15);
+    box-shadow: 0 0 20px rgba(248,81,73,0.15);
+}
+
+.direction-arrow {
+    font-size: 24px;
+    line-height: 1;
+}
+
+.direction-long .direction-arrow { color: var(--green); }
+.direction-short .direction-arrow { color: var(--red); }
+
+.direction-title {
+    font-size: 16px;
+    font-weight: 800;
+    letter-spacing: 1px;
+}
+
+.direction-long .direction-title { color: var(--green); }
+.direction-short .direction-title { color: var(--red); }
+
+.direction-desc {
+    font-size: 11px;
+    color: var(--text-dim);
+}
+
+/* Direction badge shown in step 2 */
+.modal-direction-badge {
+    text-align: center;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    padding: 6px 0;
+    border-radius: 6px;
+    text-transform: uppercase;
+}
+
+.modal-direction-badge.long {
+    background: var(--green-bg);
+    color: var(--green);
+    border: 1px solid rgba(63,185,80,0.3);
+}
+
+.modal-direction-badge.short {
+    background: var(--red-bg);
+    color: var(--red);
+    border: 1px solid rgba(248,81,73,0.3);
+}
+
+.modal-step-buttons {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+}
 
 /* === New Trade Section === */
 .new-trade-section { background: var(--bg-section); }

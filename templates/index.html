@@ -194,7 +194,9 @@
                 <h3>New Trade</h3>
                 <button id="btn-close-modal" class="modal-close">&times;</button>
             </div>
-            <div class="modal-body">
+
+            <!-- Step 1: Long or Short selection -->
+            <div id="modal-step-direction" class="modal-body">
                 <div class="trade-row">
                     <label>Symbol:</label>
                     <select id="modal-symbol-selector"></select>
@@ -203,12 +205,26 @@
                     <span id="modal-symbol-name">--</span>
                     <div id="modal-current-price" class="big-price">--</div>
                 </div>
-                <div class="trade-row">
-                    <label>Action:</label>
-                    <div class="modal-action-tabs">
-                        <button class="modal-tab active" data-action="buy">BUY</button>
-                        <button class="modal-tab" data-action="sell">SELL</button>
-                    </div>
+                <div class="direction-choice">
+                    <button id="btn-go-long" class="direction-btn direction-long">
+                        <span class="direction-arrow">&#9650;</span>
+                        <span class="direction-title">GO LONG</span>
+                        <span class="direction-desc">Buy now, profit when price goes up</span>
+                    </button>
+                    <button id="btn-go-short" class="direction-btn direction-short">
+                        <span class="direction-arrow">&#9660;</span>
+                        <span class="direction-title">GO SHORT</span>
+                        <span class="direction-desc">Sell now, profit when price goes down</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Step 2: Trade details (shown after picking Long or Short) -->
+            <div id="modal-step-details" class="modal-body" style="display:none;">
+                <div id="modal-direction-badge" class="modal-direction-badge long">LONG</div>
+                <div class="modal-price-display">
+                    <span id="modal-detail-name">--</span>
+                    <div id="modal-detail-price" class="big-price">--</div>
                 </div>
                 <div class="trade-row">
                     <label>Qty:</label>
@@ -218,9 +234,12 @@
                     <label>Total:</label>
                     <span id="modal-trade-total">$0.00</span>
                 </div>
-                <button id="btn-modal-execute" class="btn btn-buy" style="width:100%; margin-top:12px; padding:12px; font-size:14px;">
-                    Execute Trade
-                </button>
+                <div class="modal-step-buttons">
+                    <button id="btn-modal-back" class="btn btn-secondary" style="flex:0 0 auto; padding:12px 16px; font-size:14px;">&#8592; Back</button>
+                    <button id="btn-modal-execute" class="btn btn-buy" style="flex:1; padding:12px; font-size:14px;">
+                        Execute Trade
+                    </button>
+                </div>
             </div>
         </div>
     </div>

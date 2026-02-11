@@ -351,7 +351,7 @@ def get_next_candle(symbol):
 def trade():
     data = request.get_json()
     symbol = data.get('symbol', '').upper()
-    action = data.get('action', '').lower()  # 'buy' or 'sell'
+    action = data.get('action', '').lower()  # 'buy', 'sell', 'short', 'cover'
     quantity = int(data.get('quantity', 0))
     price = float(data.get('price', 0))
 
@@ -365,18 +365,23 @@ def trade():
     total_cost = price * quantity
 
     if action == 'buy':
+        # Normal long buy
         if total_cost > wallet['cash']:
             return jsonify({'error': 'Insufficient funds'}), 400
         wallet['cash'] -= total_cost
-        pos = wallet['positions'].get(symbol, {'shares': 0, 'avg_price': 0})
+        pos = wallet['positions'].get(symbol, {'shares': 0, 'avg_price': 0, 'type': 'long'})
         total_shares = pos['shares'] + quantity
         if total_shares > 0:
             pos['avg_price'] = ((pos['avg_price'] * pos['shares']) + total_cost) / total_shares
         pos['shares'] = total_shares
+        pos['type'] = 'long'
         wallet['positions'][symbol] = pos
 
     elif action == 'sell':
-        pos = wallet['positions'].get(symbol, {'shares': 0, 'avg_price': 0})
+        # Sell long position
+        pos = wallet['positions'].get(symbol, {'shares': 0, 'avg_price': 0, 'type': 'long'})
+        if pos.get('type') == 'short':
+            return jsonify({'error': 'Use cover to close a short position'}), 400
         if quantity > pos['shares']:
             return jsonify({'error': f'Not enough shares. You have {pos["shares"]}'}), 400
         wallet['cash'] += total_cost
@@ -385,8 +390,44 @@ def trade():
             del wallet['positions'][symbol]
         else:
             wallet['positions'][symbol] = pos
+
+    elif action == 'short':
+        # Short sell: borrow shares and sell at current price
+        # Requires margin (collateral) = total_cost held from cash
+        if total_cost > wallet['cash']:
+            return jsonify({'error': 'Insufficient margin for short'}), 400
+        wallet['cash'] -= total_cost  # hold as margin collateral
+        pos = wallet['positions'].get(symbol)
+        if pos and pos.get('type') == 'long':
+            return jsonify({'error': 'Already have a long position. Sell it first.'}), 400
+        if pos and pos.get('type') == 'short':
+            # Add to existing short
+            total_shares = pos['shares'] + quantity
+            pos['avg_price'] = ((pos['avg_price'] * pos['shares']) + total_cost) / total_shares
+            pos['shares'] = total_shares
+        else:
+            pos = {'shares': quantity, 'avg_price': price, 'type': 'short'}
+        wallet['positions'][symbol] = pos
+
+    elif action == 'cover':
+        # Cover short: buy back shares to close short position
+        pos = wallet['positions'].get(symbol)
+        if not pos or pos.get('type') != 'short':
+            return jsonify({'error': f'No short position in {symbol}'}), 400
+        if quantity > pos['shares']:
+            return jsonify({'error': f'Only {pos["shares"]} shares shorted'}), 400
+        # Profit/loss = (entry_price - cover_price) * quantity
+        # Return the original margin + profit (or - loss)
+        margin_returned = pos['avg_price'] * quantity  # original collateral back
+        pnl = (pos['avg_price'] - price) * quantity    # short profit if price dropped
+        wallet['cash'] += margin_returned + pnl
+        pos['shares'] -= quantity
+        if pos['shares'] == 0:
+            del wallet['positions'][symbol]
+        else:
+            wallet['positions'][symbol] = pos
     else:
-        return jsonify({'error': 'Action must be buy or sell'}), 400
+        return jsonify({'error': 'Action must be buy, sell, short, or cover'}), 400
 
     wallet['history'].append({
         'time': datetime.now().isoformat(),
@@ -447,7 +488,7 @@ def get_quote(symbol):
 
 @app.route('/api/trade/close', methods=['POST'])
 def close_position():
-    """Close an entire position at market price."""
+    """Close an entire position at market price (works for both long and short)."""
     data = request.get_json()
     symbol = data.get('symbol', '').upper()
     price = float(data.get('price', 0))
@@ -459,17 +500,29 @@ def close_position():
         return jsonify({'error': 'Invalid price'}), 400
 
     quantity = pos['shares']
-    total = price * quantity
-    wallet['cash'] += total
+    pos_type = pos.get('type', 'long')
+
+    if pos_type == 'short':
+        # Cover short: return margin + pnl
+        margin_returned = pos['avg_price'] * quantity
+        pnl = (pos['avg_price'] - price) * quantity
+        wallet['cash'] += margin_returned + pnl
+        action = 'cover'
+    else:
+        # Sell long position
+        total = price * quantity
+        wallet['cash'] += total
+        action = 'sell'
+
     del wallet['positions'][symbol]
 
     wallet['history'].append({
         'time': datetime.now().isoformat(),
         'symbol': symbol,
-        'action': 'sell',
+        'action': action,
         'quantity': quantity,
         'price': price,
-        'total': round(total, 2),
+        'total': round(price * quantity, 2),
     })
 
     save_wallet()

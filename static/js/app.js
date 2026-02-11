@@ -766,12 +766,19 @@ async function executeTrade(action) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// ─── TRADE MODAL ─────────────────────────────────────────────────
+// ─── TRADE MODAL (2-step: Long/Short → Details) ────────────────
 // ═══════════════════════════════════════════════════════════════════
+
+// Track modal state
+let modalDirection = 'long'; // 'long' or 'short'
 
 async function openTradeModal(preselectedSymbol = null) {
     const modal = document.getElementById('trade-modal');
     modal.classList.remove('hidden');
+
+    // Always show step 1 first
+    document.getElementById('modal-step-direction').style.display = '';
+    document.getElementById('modal-step-details').style.display = 'none';
 
     const sel = document.getElementById('modal-symbol-selector');
     if (sel.children.length === 0) {
@@ -801,7 +808,7 @@ async function updateModalPrice() {
         nameEl.textContent = quote.name;
         priceEl.textContent = '$' + quote.price.toFixed(2);
         state.modalPrice = quote.price;
-        // Update total
+        // Update total on step 2
         const qty = parseInt(document.getElementById('modal-trade-qty').value) || 0;
         document.getElementById('modal-trade-total').textContent = formatMoney(qty * quote.price);
     } catch (e) {
@@ -810,16 +817,58 @@ async function updateModalPrice() {
     }
 }
 
+function selectDirection(direction) {
+    modalDirection = direction;
+
+    // Hide step 1, show step 2
+    document.getElementById('modal-step-direction').style.display = 'none';
+    document.getElementById('modal-step-details').style.display = '';
+
+    // Update direction badge
+    const badge = document.getElementById('modal-direction-badge');
+    badge.textContent = direction === 'long' ? 'LONG — Buy to profit when price rises' : 'SHORT — Sell to profit when price drops';
+    badge.className = 'modal-direction-badge ' + direction;
+
+    // Update detail price display
+    const symbol = document.getElementById('modal-symbol-selector').value;
+    document.getElementById('modal-detail-name').textContent =
+        document.getElementById('modal-symbol-name').textContent;
+    document.getElementById('modal-detail-price').textContent =
+        document.getElementById('modal-current-price').textContent;
+
+    // Update execute button style
+    const execBtn = document.getElementById('btn-modal-execute');
+    if (direction === 'long') {
+        execBtn.className = 'btn btn-buy';
+        execBtn.textContent = 'Execute Long Trade';
+    } else {
+        execBtn.className = 'btn btn-sell';
+        execBtn.textContent = 'Execute Short Trade';
+    }
+    execBtn.style.cssText = 'flex:1; padding:12px; font-size:14px;';
+
+    // Update total
+    const qty = parseInt(document.getElementById('modal-trade-qty').value) || 0;
+    document.getElementById('modal-trade-total').textContent = formatMoney(qty * state.modalPrice);
+}
+
+function modalGoBack() {
+    document.getElementById('modal-step-direction').style.display = '';
+    document.getElementById('modal-step-details').style.display = 'none';
+}
+
 async function executeModalTrade() {
     const symbol = document.getElementById('modal-symbol-selector').value;
     const qty = parseInt(document.getElementById('modal-trade-qty').value);
-    const action = document.querySelector('.modal-tab.active').dataset.action;
     const price = state.modalPrice;
 
     if (!qty || qty <= 0 || !price) {
         showToast('Invalid trade parameters', 'error');
         return;
     }
+
+    // Determine action based on direction
+    const action = modalDirection === 'long' ? 'buy' : 'short';
 
     try {
         const res = await api('/api/trade', {
@@ -832,7 +881,8 @@ async function executeModalTrade() {
 
         state.wallet = res.wallet;
         updateWalletUI();
-        showToast(`${action.toUpperCase()} ${qty} ${symbol} @ $${price.toFixed(2)}`, 'success');
+        const label = modalDirection === 'long' ? 'LONG BUY' : 'SHORT SELL';
+        showToast(`${label} ${qty} ${symbol} @ $${price.toFixed(2)}`, 'success');
         document.getElementById('trade-modal').classList.add('hidden');
     } catch (e) {
         showToast('Trade failed', 'error');
@@ -879,22 +929,31 @@ function updateWalletUI() {
         for (const [sym, pos] of Object.entries(w.positions)) {
             const card = document.createElement('div');
             card.className = 'position-card';
+            const isShort = pos.type === 'short';
             const cost = pos.shares * pos.avg_price;
             const marketVal = pos.shares * state.currentPrice;
-            const posPnl = sym === state.symbol ? marketVal - cost : 0;
+            // For longs: profit when price goes up. For shorts: profit when price goes down.
+            let posPnl = 0;
+            if (sym === state.symbol) {
+                posPnl = isShort ? (pos.avg_price - state.currentPrice) * pos.shares : marketVal - cost;
+            }
+            const typeBadge = isShort
+                ? '<span style="font-size:9px;font-weight:700;background:var(--red-bg);color:var(--red);padding:1px 5px;border-radius:3px;margin-left:6px;">SHORT</span>'
+                : '<span style="font-size:9px;font-weight:700;background:var(--green-bg);color:var(--green);padding:1px 5px;border-radius:3px;margin-left:6px;">LONG</span>';
+            const closeLabel = isShort ? 'Cover' : 'Close';
             card.innerHTML = `
                 <div class="pos-header">
-                    <div class="symbol">${sym}</div>
+                    <div class="symbol">${sym}${typeBadge}</div>
                     <div class="pos-actions">
                         <button class="btn-pos-add" data-symbol="${sym}" title="Add to position">+</button>
-                        <button class="btn-pos-close" data-symbol="${sym}" title="Close position">Close</button>
+                        <button class="btn-pos-close" data-symbol="${sym}" title="${closeLabel} position">${closeLabel}</button>
                     </div>
                 </div>
                 <div class="details">
                     ${pos.shares} shares @ $${pos.avg_price.toFixed(2)}<br>
-                    Cost: ${formatMoney(cost)}
+                    ${isShort ? 'Margin' : 'Cost'}: ${formatMoney(cost)}
                 </div>
-                ${sym === state.symbol ? `<div class="pnl ${posPnl >= 0 ? 'positive' : 'negative'}">${posPnl >= 0 ? '+' : ''}${formatMoney(posPnl)}</div>` : ''}
+                ${sym === state.symbol ? `<div class="pnl ${posPnl >= 0 ? 'positive' : 'negative'}">${posPnl >= 0 ? '+' : '-'}${formatMoney(Math.abs(posPnl))}</div>` : ''}
             `;
             posEl.appendChild(card);
         }
@@ -1025,9 +1084,9 @@ function bindEvents() {
         if (win) loadWindowChart(win);
     });
 
-    // Trading
-    document.getElementById('btn-buy').addEventListener('click', () => executeTrade('buy'));
-    document.getElementById('btn-sell').addEventListener('click', () => executeTrade('sell'));
+    // Trading - left panel buttons open the modal for Long/Short selection
+    document.getElementById('btn-buy').addEventListener('click', () => openTradeModal());
+    document.getElementById('btn-sell').addEventListener('click', () => openTradeModal());
     document.getElementById('trade-qty').addEventListener('input', updateTradeTotal);
 
     // Reset wallet
@@ -1052,16 +1111,12 @@ function bindEvents() {
     document.getElementById('modal-symbol-selector').addEventListener('change', updateModalPrice);
     document.getElementById('btn-modal-execute').addEventListener('click', executeModalTrade);
 
-    // Modal action tabs
-    document.querySelectorAll('.modal-tab').forEach(tab => {
-        tab.addEventListener('click', () => {
-            document.querySelectorAll('.modal-tab').forEach(t => t.classList.remove('active'));
-            tab.classList.add('active');
-            const btn = document.getElementById('btn-modal-execute');
-            btn.className = tab.dataset.action === 'buy' ? 'btn btn-buy' : 'btn btn-sell';
-            btn.style.cssText = 'width:100%; margin-top:12px; padding:12px; font-size:14px;';
-        });
-    });
+    // Long/Short direction buttons (step 1)
+    document.getElementById('btn-go-long').addEventListener('click', () => selectDirection('long'));
+    document.getElementById('btn-go-short').addEventListener('click', () => selectDirection('short'));
+
+    // Back button (step 2 → step 1)
+    document.getElementById('btn-modal-back').addEventListener('click', modalGoBack);
 
     // Modal qty input
     document.getElementById('modal-trade-qty').addEventListener('input', () => {
