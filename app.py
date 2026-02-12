@@ -384,6 +384,7 @@ def trade():
             return jsonify({'error': 'Use cover to close a short position'}), 400
         if quantity > pos['shares']:
             return jsonify({'error': f'Not enough shares. You have {pos["shares"]}'}), 400
+        sell_pnl = (price - pos['avg_price']) * quantity
         wallet['cash'] += total_cost
         pos['shares'] -= quantity
         if pos['shares'] == 0:
@@ -419,8 +420,8 @@ def trade():
         # Profit/loss = (entry_price - cover_price) * quantity
         # Return the original margin + profit (or - loss)
         margin_returned = pos['avg_price'] * quantity  # original collateral back
-        pnl = (pos['avg_price'] - price) * quantity    # short profit if price dropped
-        wallet['cash'] += margin_returned + pnl
+        cover_pnl = (pos['avg_price'] - price) * quantity    # short profit if price dropped
+        wallet['cash'] += margin_returned + cover_pnl
         pos['shares'] -= quantity
         if pos['shares'] == 0:
             del wallet['positions'][symbol]
@@ -429,17 +430,31 @@ def trade():
     else:
         return jsonify({'error': 'Action must be buy, sell, short, or cover'}), 400
 
-    wallet['history'].append({
+    # Calculate P&L for closing trades (sell/cover)
+    trade_pnl = None
+    if action == 'sell':
+        trade_pnl = round(sell_pnl, 2)
+    elif action == 'cover':
+        trade_pnl = round(cover_pnl, 2)
+
+    trade_record = {
         'time': datetime.now().isoformat(),
         'symbol': symbol,
         'action': action,
         'quantity': quantity,
         'price': price,
         'total': round(total_cost, 2),
-    })
+    }
+    if trade_pnl is not None:
+        trade_record['pnl'] = trade_pnl
+
+    wallet['history'].append(trade_record)
 
     save_wallet()
-    return jsonify({'success': True, 'wallet': get_wallet_state()})
+    result = {'success': True, 'wallet': get_wallet_state()}
+    if trade_pnl is not None:
+        result['pnl'] = trade_pnl
+    return jsonify(result)
 
 
 def get_wallet_state():
@@ -511,6 +526,7 @@ def close_position():
     else:
         # Sell long position
         total = price * quantity
+        pnl = (price - pos['avg_price']) * quantity
         wallet['cash'] += total
         action = 'sell'
 
@@ -523,10 +539,11 @@ def close_position():
         'quantity': quantity,
         'price': price,
         'total': round(price * quantity, 2),
+        'pnl': round(pnl, 2),
     })
 
     save_wallet()
-    return jsonify({'success': True, 'wallet': get_wallet_state()})
+    return jsonify({'success': True, 'wallet': get_wallet_state(), 'pnl': round(pnl, 2)})
 
 
 # Load saved wallet state on startup

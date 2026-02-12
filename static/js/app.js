@@ -778,6 +778,7 @@ async function sellClosePosition() {
 
     const pos = state.wallet.positions[symbol];
     const posType = pos.type === 'short' ? 'SHORT' : 'LONG';
+    const quantity = pos.shares;
 
     try {
         showToast(`Closing ${posType} ${symbol} at market...`, 'info');
@@ -794,7 +795,11 @@ async function sellClosePosition() {
 
         state.wallet = res.wallet;
         updateWalletUI();
-        showToast(`Closed ${posType} ${symbol} @ $${quote.price.toFixed(2)}`, 'success');
+
+        // Show the big congratulations/loss popup
+        if (res.pnl !== undefined) {
+            showTradeResult(res.pnl, symbol, quantity, quote.price);
+        }
     } catch (e) {
         showToast('Failed to close position', 'error');
     }
@@ -1037,6 +1042,8 @@ function updateWalletUI() {
             btn.addEventListener('click', async (e) => {
                 e.stopPropagation();
                 const sym = btn.dataset.symbol;
+                const posData = state.wallet.positions[sym];
+                const qty = posData ? posData.shares : 0;
                 if (confirm(`Close entire ${sym} position?`)) {
                     try {
                         const quote = await api(`/api/quote/${sym}`);
@@ -1049,7 +1056,10 @@ function updateWalletUI() {
                         if (res.error) { showToast(res.error, 'error'); return; }
                         state.wallet = res.wallet;
                         updateWalletUI();
-                        showToast(`Closed ${sym} position`, 'success');
+                        // Show the big congratulations/loss popup
+                        if (res.pnl !== undefined) {
+                            showTradeResult(res.pnl, sym, qty, quote.price);
+                        }
                     } catch (e) { showToast('Failed to close position', 'error'); }
                 }
             });
@@ -1066,10 +1076,19 @@ function updateWalletUI() {
         for (const trade of reversed) {
             const rec = document.createElement('div');
             rec.className = 'trade-record';
+
+            // Build P&L display for closing trades (sell/cover)
+            let pnlHtml = '';
+            if (trade.pnl !== undefined && trade.pnl !== null) {
+                const pnlClass = trade.pnl >= 0 ? 'positive' : 'negative';
+                const pnlSign = trade.pnl >= 0 ? '+' : '-';
+                pnlHtml = `<span class="trade-pnl ${pnlClass}">${pnlSign}${formatMoney(Math.abs(trade.pnl))}</span>`;
+            }
+
             rec.innerHTML = `
                 <span class="trade-tag ${trade.action}">${trade.action}</span>
                 <span class="trade-info">${trade.quantity} ${trade.symbol} @ $${trade.price.toFixed(2)}</span>
-                <span class="trade-amount">${formatMoney(trade.total)}</span>
+                ${pnlHtml || `<span class="trade-amount">${formatMoney(trade.total)}</span>`}
             `;
             histEl.appendChild(rec);
         }
@@ -1100,6 +1119,37 @@ function showToast(msg, type = 'info') {
     toast.textContent = msg;
     toast.className = `toast ${type} show`;
     setTimeout(() => { toast.className = 'toast hidden'; }, 3000);
+}
+
+function showTradeResult(pnl, symbol, quantity, closePrice) {
+    const isWin = pnl >= 0;
+    const overlay = document.createElement('div');
+    overlay.className = 'trade-result-overlay';
+    overlay.innerHTML = `
+        <div class="trade-result-card ${isWin ? 'win' : 'lose'}">
+            <div class="trade-result-emoji">${isWin ? '🎉' : '😔'}</div>
+            <div class="trade-result-title">${isWin ? 'Congratulations!' : 'Oh no...'}</div>
+            <div class="trade-result-amount">${isWin ? '+' : '-'}${formatMoney(Math.abs(pnl))}</div>
+            <div class="trade-result-detail">
+                ${isWin ? 'You earned' : 'You lost'} ${formatMoney(Math.abs(pnl))} on ${quantity} ${symbol} @ $${closePrice.toFixed(2)}
+            </div>
+            <button class="trade-result-dismiss" onclick="this.closest('.trade-result-overlay').remove()">
+                ${isWin ? 'Nice!' : 'Close'}
+            </button>
+        </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    // Click outside the card to dismiss
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) overlay.remove();
+    });
+
+    // Auto-dismiss after 8 seconds
+    setTimeout(() => {
+        if (overlay.parentElement) overlay.remove();
+    }, 8000);
 }
 
 // ═══════════════════════════════════════════════════════════════════

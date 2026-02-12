@@ -788,6 +788,118 @@ select:focus, input[type="number"]:focus { border-color: var(--blue); }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
+/* === Trade Result Popup === */
+.trade-result-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.trade-result-card {
+    text-align: center;
+    padding: 40px 60px;
+    border-radius: 16px;
+    min-width: 340px;
+    animation: popIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes popIn {
+    from { transform: scale(0.5); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+}
+
+.trade-result-card.win {
+    background: linear-gradient(135deg, #0d2818 0%, #132f1e 50%, #0d1117 100%);
+    border: 2px solid var(--green);
+    box-shadow: 0 0 40px rgba(63,185,80,0.3), 0 0 80px rgba(63,185,80,0.1);
+}
+
+.trade-result-card.lose {
+    background: linear-gradient(135deg, #2d0f0f 0%, #301414 50%, #0d1117 100%);
+    border: 2px solid var(--red);
+    box-shadow: 0 0 40px rgba(248,81,73,0.3), 0 0 80px rgba(248,81,73,0.1);
+}
+
+.trade-result-emoji {
+    font-size: 48px;
+    margin-bottom: 12px;
+}
+
+.trade-result-title {
+    font-size: 24px;
+    font-weight: 800;
+    margin-bottom: 8px;
+    letter-spacing: 0.5px;
+}
+
+.trade-result-card.win .trade-result-title { color: var(--green); }
+.trade-result-card.lose .trade-result-title { color: var(--red); }
+
+.trade-result-amount {
+    font-size: 36px;
+    font-weight: 800;
+    letter-spacing: -1px;
+    margin-bottom: 6px;
+}
+
+.trade-result-card.win .trade-result-amount { color: var(--green); }
+.trade-result-card.lose .trade-result-amount { color: var(--red); }
+
+.trade-result-detail {
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-bottom: 20px;
+}
+
+.trade-result-dismiss {
+    padding: 10px 30px;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.15s;
+}
+
+.trade-result-card.win .trade-result-dismiss {
+    background: var(--green);
+    color: #fff;
+}
+
+.trade-result-card.win .trade-result-dismiss:hover {
+    background: #37a348;
+}
+
+.trade-result-card.lose .trade-result-dismiss {
+    background: var(--red);
+    color: #fff;
+}
+
+.trade-result-card.lose .trade-result-dismiss:hover {
+    background: #e0443c;
+}
+
+/* Trade history P&L */
+.trade-pnl {
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.trade-pnl.positive { color: var(--green); }
+.trade-pnl.negative { color: var(--red); }
+
 /* === Loading === */
 .loading-overlay {
     position: absolute; inset: 0;
