@@ -780,15 +780,25 @@ async function sellClosePosition() {
     const posType = pos.type === 'short' ? 'SHORT' : 'LONG';
     const quantity = pos.shares;
 
+    // Use the current live price shown on screen (updated every 3s by live updates)
+    // This ensures P&L matches what the user sees, not a stale /api/quote value
+    let closePrice = state.currentPrice;
+    if (!closePrice || closePrice <= 0) {
+        // Fallback to quote API if no live price available
+        try {
+            const quote = await api(`/api/quote/${symbol}`);
+            if (quote.error) { showToast(quote.error, 'error'); return; }
+            closePrice = quote.price;
+        } catch (e) { showToast('Failed to get price', 'error'); return; }
+    }
+
     try {
         showToast(`Closing ${posType} ${symbol} at market...`, 'info');
-        const quote = await api(`/api/quote/${symbol}`);
-        if (quote.error) { showToast(quote.error, 'error'); return; }
 
         const res = await api('/api/trade/close', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ symbol, price: quote.price }),
+            body: JSON.stringify({ symbol, price: closePrice }),
         });
 
         if (res.error) { showToast(res.error, 'error'); return; }
@@ -798,7 +808,7 @@ async function sellClosePosition() {
 
         // Show the big congratulations/loss popup
         if (res.pnl !== undefined) {
-            showTradeResult(res.pnl, symbol, quantity, quote.price);
+            showTradeResult(res.pnl, symbol, quantity, closePrice);
         }
     } catch (e) {
         showToast('Failed to close position', 'error');
@@ -1046,19 +1056,26 @@ function updateWalletUI() {
                 const qty = posData ? posData.shares : 0;
                 if (confirm(`Close entire ${sym} position?`)) {
                     try {
-                        const quote = await api(`/api/quote/${sym}`);
-                        if (quote.error) { showToast(quote.error, 'error'); return; }
+                        // Use live price if this is the active symbol, otherwise fetch quote
+                        let closePrice = 0;
+                        if (sym === state.symbol && state.currentPrice > 0) {
+                            closePrice = state.currentPrice;
+                        } else {
+                            const quote = await api(`/api/quote/${sym}`);
+                            if (quote.error) { showToast(quote.error, 'error'); return; }
+                            closePrice = quote.price;
+                        }
                         const res = await api('/api/trade/close', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ symbol: sym, price: quote.price }),
+                            body: JSON.stringify({ symbol: sym, price: closePrice }),
                         });
                         if (res.error) { showToast(res.error, 'error'); return; }
                         state.wallet = res.wallet;
                         updateWalletUI();
                         // Show the big congratulations/loss popup
                         if (res.pnl !== undefined) {
-                            showTradeResult(res.pnl, sym, qty, quote.price);
+                            showTradeResult(res.pnl, sym, qty, closePrice);
                         }
                     } catch (e) { showToast('Failed to close position', 'error'); }
                 }
