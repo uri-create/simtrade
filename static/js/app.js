@@ -17,6 +17,8 @@ const state = {
         lastClose: 0,
         lastTime: 0,
         candleCount: 0,
+        sessionId: null,   // Smart sim session ID from backend
+        context: null,     // TA analysis context from backend
     },
     // Modal
     modalPrice: 0,
@@ -637,11 +639,36 @@ async function startSimulation() {
     state.simulation.candleCount = 0;
     state.simulation.running = true;
     state.simulation.paused = false;
+    state.simulation.sessionId = null;
+    state.simulation.context = null;
+
+    // Initialize smart simulation — analyze chart for TA context
+    try {
+        updateSimStatus('Analyzing...');
+        const initRes = await api('/api/simulation/init', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ symbol: win.symbol, timeframe: win.timeframe }),
+        });
+
+        if (initRes.session_id) {
+            state.simulation.sessionId = initRes.session_id;
+            state.simulation.context = initRes.context;
+            const ctx = initRes.context;
+            const trendLabel = ctx.trend === 'uptrend' ? 'Uptrend' :
+                               ctx.trend === 'downtrend' ? 'Downtrend' : 'Sideways';
+            const trendIcon = ctx.trend === 'uptrend' ? '📈' :
+                              ctx.trend === 'downtrend' ? '📉' : '↔️';
+            showToast(`${trendIcon} Smart Sim: ${trendLabel} detected (RSI: ${ctx.rsi})`, 'info');
+        }
+    } catch (e) {
+        console.warn('Smart sim init failed, using basic mode:', e);
+        showToast('Simulation started (basic mode)', 'info');
+    }
 
     document.getElementById('sim-progress-wrap').style.display = 'block';
     updateSimButtons();
     updateSimStatus('Running');
-    showToast('Simulation started', 'info');
     runSimTick();
 }
 
@@ -653,9 +680,10 @@ async function runSimTick() {
     state.simulation.timer = setTimeout(async () => {
         const sim = state.simulation;
         try {
+            const sessionParam = sim.sessionId ? `&session_id=${sim.sessionId}` : '';
             const candle = await api(
                 `/api/simulation/next/${win.symbol}?timeframe=${win.timeframe}` +
-                `&last_close=${sim.lastClose}&last_time=${sim.lastTime}`
+                `&last_close=${sim.lastClose}&last_time=${sim.lastTime}${sessionParam}`
             );
 
             if (candle.error) {
