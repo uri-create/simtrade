@@ -505,6 +505,23 @@ select:focus, input[type="number"]:focus { border-color: var(--blue); }
 
 .paint-action:hover { color: var(--text); border-color: var(--text-dim); }
 
+.eraser-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.eraser-btn.active {
+    background: var(--orange);
+    color: #fff;
+    border-color: var(--orange);
+}
+
+/* Eraser cursor when active */
+.window-drawing-canvas.eraser-active {
+    cursor: pointer !important;
+}
+
 /* === Positions List === */
 .positions-list, .trade-history {
     max-height: 300px;

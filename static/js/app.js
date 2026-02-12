@@ -766,6 +766,41 @@ async function executeTrade(action) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// ─── INSTANT SELL (close current position at market) ────────────
+// ═══════════════════════════════════════════════════════════════════
+
+async function sellClosePosition() {
+    const symbol = state.symbol;
+    if (!state.wallet || !state.wallet.positions || !state.wallet.positions[symbol]) {
+        showToast(`No open position in ${symbol} to close`, 'error');
+        return;
+    }
+
+    const pos = state.wallet.positions[symbol];
+    const posType = pos.type === 'short' ? 'SHORT' : 'LONG';
+
+    try {
+        showToast(`Closing ${posType} ${symbol} at market...`, 'info');
+        const quote = await api(`/api/quote/${symbol}`);
+        if (quote.error) { showToast(quote.error, 'error'); return; }
+
+        const res = await api('/api/trade/close', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ symbol, price: quote.price }),
+        });
+
+        if (res.error) { showToast(res.error, 'error'); return; }
+
+        state.wallet = res.wallet;
+        updateWalletUI();
+        showToast(`Closed ${posType} ${symbol} @ $${quote.price.toFixed(2)}`, 'success');
+    } catch (e) {
+        showToast('Failed to close position', 'error');
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════
 // ─── TRADE MODAL (2-step: Long/Short → Details) ────────────────
 // ═══════════════════════════════════════════════════════════════════
 
@@ -894,8 +929,41 @@ async function executeModalTrade() {
 // ═══════════════════════════════════════════════════════════════════
 
 async function loadWallet() {
-    state.wallet = await api('/api/wallet');
+    try {
+        state.wallet = await api('/api/wallet');
+    } catch (e) {
+        console.error('Failed to load wallet from server:', e);
+    }
+
+    // If server wallet has no history but localStorage does, merge it in
+    const backup = getWalletBackup();
+    if (backup && backup.history && backup.history.length > 0) {
+        if (!state.wallet || !state.wallet.history || state.wallet.history.length === 0) {
+            // Server lost history (Render restart) — restore from localStorage
+            if (state.wallet) {
+                state.wallet.history = backup.history;
+            } else {
+                state.wallet = backup;
+            }
+        }
+    }
+
+    // Also restore positions if server lost them
+    if (backup && backup.positions && Object.keys(backup.positions).length > 0) {
+        if (state.wallet && (!state.wallet.positions || Object.keys(state.wallet.positions).length === 0)) {
+            state.wallet.positions = backup.positions;
+            state.wallet.cash = backup.cash;
+        }
+    }
+
     updateWalletUI();
+}
+
+function getWalletBackup() {
+    try {
+        const raw = localStorage.getItem('simtrade_wallet_backup');
+        return raw ? JSON.parse(raw) : null;
+    } catch (e) { return null; }
 }
 
 function updateWalletUI() {
@@ -1084,15 +1152,17 @@ function bindEvents() {
         if (win) loadWindowChart(win);
     });
 
-    // Trading - left panel buttons open the modal for Long/Short selection
+    // Trading - BUY opens the Long/Short modal, SELL immediately closes current position
     document.getElementById('btn-buy').addEventListener('click', () => openTradeModal());
-    document.getElementById('btn-sell').addEventListener('click', () => openTradeModal());
+    document.getElementById('btn-sell').addEventListener('click', () => sellClosePosition());
     document.getElementById('trade-qty').addEventListener('input', updateTradeTotal);
 
     // Reset wallet
     document.getElementById('btn-reset-wallet').addEventListener('click', async () => {
         if (confirm('Reset wallet to $100,000? All positions and history will be cleared.')) {
             await api('/api/wallet/reset', { method: 'POST' });
+            // Clear localStorage backup too
+            try { localStorage.removeItem('simtrade_wallet_backup'); } catch (e) {}
             await loadWallet();
             showToast('Wallet reset to $100,000', 'info');
         }
@@ -1149,6 +1219,7 @@ const paint = {
     ctx: null,
     on: false,
     drawing: false,
+    erasing: false,
     color: '#f85149',
     size: 4,
     strokes: [],
@@ -1175,6 +1246,9 @@ function initPaint() {
         paint.size = parseInt(e.target.value);
     });
 
+    // Eraser
+    document.getElementById('btn-paint-eraser').addEventListener('click', toggleEraser);
+
     // Undo / Clear
     document.getElementById('btn-paint-undo').addEventListener('click', () => {
         if (paint.strokes.length === 0) return;
@@ -1187,11 +1261,13 @@ function initPaint() {
         repaint();
     });
 
-    // Keyboard: P to toggle, Escape to turn off
+    // Keyboard: P to toggle paint, E to toggle eraser, Escape to turn off
     document.addEventListener('keydown', (e) => {
         if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
-        if (e.key.toLowerCase() === 'p') togglePaint();
+        if (e.key.toLowerCase() === 'p') { if (paint.erasing) toggleEraser(); togglePaint(); }
+        if (e.key.toLowerCase() === 'e') toggleEraser();
         if (e.key === 'Escape' && paint.on) togglePaint();
+        if (e.key === 'Escape' && paint.erasing) toggleEraser();
         if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
             e.preventDefault();
             if (paint.strokes.length > 0) { paint.strokes.pop(); repaint(); }
@@ -1232,8 +1308,9 @@ function updatePaintCanvas() {
     canvas.addEventListener('mouseup', paintEnd);
     canvas.addEventListener('mouseleave', paintEnd);
 
-    // Apply current paint state
-    canvas.classList.toggle('active', paint.on);
+    // Apply current paint/eraser state
+    canvas.classList.toggle('active', paint.on || paint.erasing);
+    canvas.classList.toggle('eraser-active', paint.erasing);
 }
 
 function sizeCanvas() {
@@ -1250,10 +1327,47 @@ function sizeCanvas() {
 }
 
 function togglePaint() {
+    // Turn off eraser if turning on paint
+    if (!paint.on && paint.erasing) toggleEraser();
     paint.on = !paint.on;
     const btn = document.getElementById('btn-paint-toggle');
     btn.classList.toggle('on', paint.on);
-    if (paint.canvas) paint.canvas.classList.toggle('active', paint.on);
+    if (paint.canvas) {
+        paint.canvas.classList.toggle('active', paint.on || paint.erasing);
+        paint.canvas.classList.toggle('eraser-active', false);
+    }
+}
+
+function toggleEraser() {
+    // Turn off paint if turning on eraser
+    if (!paint.erasing && paint.on) {
+        paint.on = false;
+        document.getElementById('btn-paint-toggle').classList.remove('on');
+    }
+    paint.erasing = !paint.erasing;
+    const btn = document.getElementById('btn-paint-eraser');
+    btn.classList.toggle('active', paint.erasing);
+    if (paint.canvas) {
+        paint.canvas.classList.toggle('active', paint.erasing || paint.on);
+        paint.canvas.classList.toggle('eraser-active', paint.erasing);
+    }
+}
+
+// Check if a point is near any point in a stroke (within threshold distance)
+function findStrokeAt(x, y) {
+    const threshold = 12; // pixels
+    // Search from top (most recent) to bottom so we erase the topmost stroke first
+    for (let i = paint.strokes.length - 1; i >= 0; i--) {
+        const stroke = paint.strokes[i];
+        for (const pt of stroke.points) {
+            const dx = pt.x - x;
+            const dy = pt.y - y;
+            if (Math.sqrt(dx * dx + dy * dy) <= threshold + stroke.size / 2) {
+                return i;
+            }
+        }
+    }
+    return -1;
 }
 
 function getXY(e) {
@@ -1262,6 +1376,18 @@ function getXY(e) {
 }
 
 function paintStart(e) {
+    // Handle eraser mode — click to erase a stroke
+    if (paint.erasing) {
+        const p = getXY(e);
+        const idx = findStrokeAt(p.x, p.y);
+        if (idx >= 0) {
+            paint.strokes.splice(idx, 1);
+            repaint();
+            showToast('Stroke erased', 'info');
+        }
+        return;
+    }
+
     if (!paint.on) return;
     paint.drawing = true;
     const p = getXY(e);
@@ -1273,6 +1399,17 @@ function paintStart(e) {
 }
 
 function paintMove(e) {
+    // Eraser drag — erase strokes as you drag over them
+    if (paint.erasing && e.buttons === 1) {
+        const p = getXY(e);
+        const idx = findStrokeAt(p.x, p.y);
+        if (idx >= 0) {
+            paint.strokes.splice(idx, 1);
+            repaint();
+        }
+        return;
+    }
+
     if (!paint.drawing) return;
     const p = getXY(e);
     paint.current.push(p);
