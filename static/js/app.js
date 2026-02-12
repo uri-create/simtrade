@@ -1078,17 +1078,17 @@ function updateWalletUI() {
             rec.className = 'trade-record';
 
             // Build P&L display for closing trades (sell/cover)
-            let pnlHtml = '';
+            let rightHtml = `<span class="trade-amount">${formatMoney(trade.total)}</span>`;
             if (trade.pnl !== undefined && trade.pnl !== null) {
                 const pnlClass = trade.pnl >= 0 ? 'positive' : 'negative';
                 const pnlSign = trade.pnl >= 0 ? '+' : '-';
-                pnlHtml = `<span class="trade-pnl ${pnlClass}">${pnlSign}${formatMoney(Math.abs(trade.pnl))}</span>`;
+                rightHtml = `<span class="trade-pnl ${pnlClass}">${pnlSign}$${Math.abs(trade.pnl).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</span>`;
             }
 
             rec.innerHTML = `
                 <span class="trade-tag ${trade.action}">${trade.action}</span>
                 <span class="trade-info">${trade.quantity} ${trade.symbol} @ $${trade.price.toFixed(2)}</span>
-                ${pnlHtml || `<span class="trade-amount">${formatMoney(trade.total)}</span>`}
+                ${rightHtml}
             `;
             histEl.appendChild(rec);
         }
@@ -1123,15 +1123,17 @@ function showToast(msg, type = 'info') {
 
 function showTradeResult(pnl, symbol, quantity, closePrice) {
     const isWin = pnl >= 0;
+    const absPnl = Math.abs(pnl);
     const overlay = document.createElement('div');
     overlay.className = 'trade-result-overlay';
     overlay.innerHTML = `
         <div class="trade-result-card ${isWin ? 'win' : 'lose'}">
             <div class="trade-result-emoji">${isWin ? '🎉' : '😔'}</div>
             <div class="trade-result-title">${isWin ? 'Congratulations!' : 'Oh no...'}</div>
-            <div class="trade-result-amount">${isWin ? '+' : '-'}${formatMoney(Math.abs(pnl))}</div>
+            <div class="trade-result-subtitle">${isWin ? 'You made money on this trade!' : 'You lost money on this trade.'}</div>
+            <div class="trade-result-amount">${isWin ? '+' : '-'}$${absPnl.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
             <div class="trade-result-detail">
-                ${isWin ? 'You earned' : 'You lost'} ${formatMoney(Math.abs(pnl))} on ${quantity} ${symbol} @ $${closePrice.toFixed(2)}
+                Closed ${quantity} ${symbol} @ $${closePrice.toFixed(2)}
             </div>
             <button class="trade-result-dismiss" onclick="this.closest('.trade-result-overlay').remove()">
                 ${isWin ? 'Nice!' : 'Close'}

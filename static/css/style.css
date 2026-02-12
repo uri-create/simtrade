@@ -845,6 +845,12 @@ select:focus, input[type="number"]:focus { border-color: var(--blue); }
 .trade-result-card.win .trade-result-title { color: var(--green); }
 .trade-result-card.lose .trade-result-title { color: var(--red); }
 
+.trade-result-subtitle {
+    font-size: 14px;
+    color: var(--text-dim);
+    margin-bottom: 16px;
+}
+
 .trade-result-amount {
     font-size: 36px;
     font-weight: 800;
